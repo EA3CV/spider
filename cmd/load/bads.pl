@@ -1,4 +1,7 @@
-# Recargar la tabla SQL 'bads' desde los ficheros: baddx, badnode, badspotter
+#
+# Reload the SQL table 'bads' from the files: baddx, badnode, badspotter
+#
+
 my $self = shift;
 my @out;
 return (1, $self->msg('e5')) if $self->priv < 9;

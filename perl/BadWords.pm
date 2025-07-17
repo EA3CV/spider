@@ -34,7 +34,7 @@ sub load {
 		$self->{_db}->load();  # <-- aquí se carga solo lo nuevo desde badword.new
 		$self->{_db}->load_into(\%in, \@relist);  # luego genera los datos en memoria
 		generate_regex();
-		dbg("[BadWords] Loaded from SQL backend: $main::db_backend");
+		dbg("BadWords: Loaded from SQL backend: $main::db_backend");
 		return;
 	}
 
@@ -131,7 +131,7 @@ sub put {
 	my $newfn = localdata("badword.new");
 	my $fh = IO::File->new(">$newfn");
 	if ($fh) {
-		dbg("BadWords: put new badword.new file");
+		dbg("BadWords: Put new badword.new file");
 		@relist = sort {$a->[0] cmp $b->[0]} @relist;
 		for (@relist) {
 			print $fh "$_->[0]\n";
@@ -201,7 +201,7 @@ sub check {
 	if ($regex) {
 		my %uniq;
 		@out = grep { ++$uniq{$_}; $uniq{$_} == 1 ? $_ : undef } ($s =~ /($regex)/g);
-		dbg("BadWords: check '$s' = '" . join(', ', @out) . "'") if isdbg('badword');
+		dbg("BadWords: Check '$s' = '" . join(', ', @out) . "'") if isdbg('badword');
 		return @out;
 	}
 	return _slowcheck($s) if @relist;

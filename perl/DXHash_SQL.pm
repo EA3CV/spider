@@ -7,6 +7,7 @@ use DXUtil;
 use DBI;
 use DXVars;
 use File::Spec;
+use DXClusterSync;
 
 my $dbh;
 my $table;
@@ -50,8 +51,14 @@ sub _check_db {
 			   PRIMARY KEY (list_name, callsign)
 		   )";
 
-	dbg("[DXHash_SQL] Creating SQLite table: $table");
+	dbg("[DXHash_SQL] Creating table: $table");
 	$dbh->do($sql);
+}
+
+sub _sync_if_changed {
+	my ($count) = @_;
+	return unless $count && $count > 0;
+	DXClusterSync::broadcast_load($table);
 }
 
 sub new {
@@ -102,10 +109,10 @@ sub _import_from_file_if_needed {
 		$count_imported++;
 	}
 
-	dbg("[DXHash_SQL] Imported from: $file $count_imported records") if $count_imported;
+	dbg("[DXHash_SQL] Imported from $file: $count_imported records") if $count_imported;
 }
 
-sub put   { return; } # No-op
+sub put   { return; }
 
 sub add {
 	my ($self, $callsign, $timestamp) = @_;
@@ -115,7 +122,9 @@ sub add {
 	my $sth = $dbh->prepare(
 		"REPLACE INTO $table (list_name, callsign, timestamp) VALUES (?, ?, ?)"
 	);
-	$sth->execute($self->{name}, $callsign, $timestamp);
+	my $count = $sth->execute($self->{name}, $callsign, $timestamp);
+	_sync_if_changed($count);
+	return $count;
 }
 
 sub del {
@@ -130,9 +139,12 @@ sub del {
 	}
 
 	my $sth = $dbh->prepare("DELETE FROM $table WHERE list_name = ? AND callsign = ?");
+	my $count = 0;
 	for my $c (@calls) {
-		$sth->execute($self->{name}, $c);
+		$count += $sth->execute($self->{name}, $c);
 	}
+	_sync_if_changed($count);
+	return $count;
 }
 
 sub in {
@@ -158,15 +170,16 @@ sub set {
 	return (1, $noline) unless @f;
 
 	my @out;
+	my $count = 0;
 	for my $f (@f) {
 		if ($self->in($f, 1)) {
 			push @out, $dxchan->msg('hasha', uc $f, $self->{name});
 			next;
 		}
-		$self->add($f);
+		$count += $self->add($f);
 		push @out, $dxchan->msg('hashb', uc $f, $self->{name});
 	}
-
+	_sync_if_changed($count);
 	return (1, @out);
 }
 
@@ -177,15 +190,16 @@ sub unset {
 	return (1, $noline) unless @f;
 
 	my @out;
+	my $count = 0;
 	for my $f (@f) {
 		unless ($self->in($f, 1)) {
 			push @out, $dxchan->msg('hashd', uc $f, $self->{name});
 			next;
 		}
-		$self->del($f, 1);
+		$count += $self->del($f, 1);
 		push @out, $dxchan->msg('hashc', uc $f, $self->{name});
 	}
-
+	_sync_if_changed($count);
 	return (1, @out);
 }
 
@@ -209,17 +223,13 @@ sub show {
 sub reload {
 	my ($self) = @_;
 
-	my $dbh   = $self->{dbh};
-	my $type  = $self->{name};  # 'baddx', 'badnode', 'badspotter'
-	my $table = 'bads';
-
+	my $type = $self->{name};  # 'baddx', 'badnode', 'badspotter'
 	my $file = File::Spec->catfile($main::local_data, $type);
 	return 0 unless -e $file;
 
 	my $insert_sql = ($main::db_backend eq 'mysql')
-		? "INSERT IGNORE INTO $table (call, ts, list_type) VALUES (?, ?, ?)"
-		: "INSERT OR IGNORE INTO $table (call, ts, list_type) VALUES (?, ?, ?)";
-
+		? "INSERT IGNORE INTO $table (list_name, callsign, timestamp) VALUES (?, ?, ?)"
+		: "INSERT OR IGNORE INTO $table (list_name, callsign, timestamp) VALUES (?, ?, ?)";
 	my $sth = $dbh->prepare($insert_sql);
 	my $now = time;
 	my $count = 0;
@@ -229,12 +239,13 @@ sub reload {
 		chomp;
 		next unless /^\s*['"]?([\w\-\/]+)['"]?\s*=>\s*(\d+)/;
 		my ($call, $ts) = (uc $1, $2);
-		$sth->execute($call, $ts, $type);
+		$sth->execute($type, $call, $ts);
 		$count++;
 	}
 	close $fh;
 
 	dbg("[DXHash_SQL] Reload: imported $count records into $table for type '$type'");
+	#_sync_if_changed($count);
 	return 1;
 }
 

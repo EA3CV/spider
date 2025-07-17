@@ -74,7 +74,7 @@ sub ensure_table_exists {
 			);
 		};
 	} else {
-		die "[ERROR] Unsupported DB driver: $driver";
+		die "[Filter_SQL] Unsupported DB driver: $driver";
 	}
 
 	my $exists = 0;
@@ -172,7 +172,7 @@ sub compile {
 sub write {
 	my $self = shift;
 	my $dbh = _get_dbh();
-	return "[ERROR] No DBH" unless $dbh;
+	return "[Filter_SQL] Error no DBH" unless $dbh;
 
 	(my $list_name = $self->{name}) =~ s/\.pl$//;
 

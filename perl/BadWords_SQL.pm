@@ -8,6 +8,7 @@ use DXUtil;
 use DXDebug;
 use IO::File;
 use File::Spec;
+use DXClusterSync;
 
 sub new {
 	my ($class) = @_;
@@ -158,6 +159,7 @@ sub add_regex {
 		push @out, $w;
 	}
 
+	$self->_sync_if_changed(scalar @out);
 	return @out;
 }
 
@@ -175,6 +177,7 @@ sub del_regex {
 		push @out, $w;
 	}
 
+	$self->_sync_if_changed(scalar @out);
 	return @out;
 }
 
@@ -266,6 +269,14 @@ sub load {
 	close $fh;
 
 	dbg("[BadWords_SQL] $count new badwords added from badword.new");
+
+	#$self->_sync_if_changed($count);
+}
+
+sub _sync_if_changed {
+	my ($self, $count) = @_;
+	return unless $count && $count > 0;
+	DXClusterSync::broadcast_load($self->{table});
 }
 
 1;

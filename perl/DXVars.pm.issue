@@ -8,6 +8,9 @@
 
 package main;
 
+# List of nodes that make up the cluster
+#@cluster_nodes = qw(NODE-1 NODE-2 NODE-3);
+
 # this really does need to change for your system!!!!			   
 # use CAPITAL LETTERS
 $mycall = "Q1QQQ-2";
@@ -51,16 +54,15 @@ $do_xml = 0;
 $Internet::contest_host = "contest.dxtron.com";
 
 # Backend selection
-$db_backend = 'mysql'; # 'file', 'sqlite', 'mysql'
+$db_backend = 'file'; # 'file', 'sqlite', 'mysql'
 
 # Data for MySQL/MariaDB
 $mysql_admin_user = "root";
-$mysql_admin_pass = "rootpass";
+$mysql_admin_pass = "your_pass";
 $mysql_db   = "dxspider";
-$mysql_user = "ea3cv";
-$mysql_pass = "dxpass";
+$mysql_user = "your_user";
+$mysql_pass = "your_pass";
 $mysql_host = "127.0.0.1";
-#$mysql_table = "users";
 
 # Data for SQLite
 $sqlite_dsn = "dbi:SQLite:dbname=$root/local_data/dxspider.db";

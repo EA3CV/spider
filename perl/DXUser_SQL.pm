@@ -42,7 +42,7 @@ sub init {
 			RaiseError     => 1,
 			AutoCommit     => 1,
 			sqlite_unicode => 1,
-		}) or die "SQLite connect error: $DBI::errstr";
+		}) or die "[DXUser_SQL] SQLite connect error: $DBI::errstr";
 
 		my $needs_init = $db_missing || !_table_exists('users');
 		if ($needs_init) {
@@ -60,7 +60,7 @@ sub init {
 		my $dbh_tmp = DBI->connect($dsn, $user, $pass, {
 			RaiseError => 1,
 			AutoCommit => 1
-		}) or die "MySQL connect error: $DBI::errstr";
+		}) or die "[DXUser_SQL] MySQL connect error: $DBI::errstr";
 
 		my $db_exists = $dbh_tmp->selectrow_array("SHOW DATABASES LIKE ?", undef, $mysql_db);
 
@@ -76,7 +76,7 @@ sub init {
 			RaiseError           => 1,
 			AutoCommit           => 1,
 			mysql_enable_utf8mb4 => 1,
-		}) or die "MySQL connect error: $DBI::errstr";
+		}) or die "[DXUser_SQL] MySQL connect error: $DBI::errstr";
 
 		my $table_exists = $dbh->selectrow_array("SHOW TABLES LIKE '$table'");
 		unless ($table_exists) {

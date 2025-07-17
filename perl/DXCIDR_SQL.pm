@@ -9,6 +9,7 @@ use DBI;
 use File::Spec;
 use File::Basename;
 use IO::File;
+use DXClusterSync;
 
 my $dbh;
 my $table = 'badips';
@@ -20,12 +21,12 @@ sub _check_db {
 	my ($user, $pass);
 
 	if ($main::db_backend eq 'sqlite') {
-		$dsn  = $main::sqlite_dsn     or die "DXCIDR_SQL: \$sqlite_dsn not defined";
+		$dsn  = $main::sqlite_dsn     or die "[DXCIDR_SQL] \$sqlite_dsn not defined";
 		$user = $main::sqlite_dbuser;
 		$pass = $main::sqlite_dbpass;
 	} elsif ($main::db_backend eq 'mysql') {
 		$dsn  = "DBI:mysql:database=$main::mysql_db;host=$main::mysql_host";
-		$user = $main::mysql_user     or die "DXCIDR_SQL: \$mysql_user not defined";
+		$user = $main::mysql_user     or die "[DXCIDR_SQL] \$mysql_user not defined";
 		$pass = $main::mysql_pass;
 	} else {
 		die "[DXCIDR_SQL] backend '$main::db_backend' not supported";
@@ -108,12 +109,14 @@ sub _import_from_files_if_needed {
 	$dbh->commit;
 
 	dbg("[DXCIDR_SQL] Total $total IPs imported from files");
+	#$self->_sync_if_changed($total);
 }
 
 sub new {
 	_check_db();
-	_import_from_files_if_needed();
-	return bless {}, shift;
+	my $self = bless {}, shift;
+	$self->_import_from_files_if_needed();
+	return $self;
 }
 
 sub init {
@@ -131,9 +134,7 @@ sub reload {
 	return 1 unless @files;
 
 	my $check_sql = "SELECT 1 FROM $table WHERE ip = ? AND list_type = ?";
-	my $insert_sql = ($main::db_backend eq 'mysql')
-		? "INSERT INTO $table (ip, ts, list_type) VALUES (?, ?, ?)"
-		: "INSERT INTO $table (ip, ts, list_type) VALUES (?, ?, ?)";
+	my $insert_sql = "INSERT INTO $table (ip, ts, list_type) VALUES (?, ?, ?)";
 
 	my $sth_check  = $dbh->prepare($check_sql);
 	my $sth_insert = $dbh->prepare($insert_sql);
@@ -167,6 +168,7 @@ sub reload {
 
 	$dbh->commit;
 	dbg("[DXCIDR_SQL] Reload completed. $total new entries added.");
+	#$self->_sync_if_changed($total);
 	return 1;
 }
 
@@ -192,7 +194,9 @@ sub append {
 
 sub add {
 	my ($self, @ips) = @_;
-	return $self->append("local", @ips);
+	my $count = $self->append("local", @ips);
+	$self->_sync_if_changed($count);
+	return $count;
 }
 
 sub remove {
@@ -209,6 +213,7 @@ sub remove {
 		$sth->execute($ip, $list_type);
 		$count++;
 	}
+	$self->_sync_if_changed($count);
 	return $count;
 }
 
@@ -242,6 +247,13 @@ sub _put {
 	close $fh;
 	dbg("[DXCIDR_SQL] Export completed.");
 	return 1;
+}
+
+sub _sync_if_changed {
+	my ($self, $count) = @_;
+	return unless $count && $count > 0;
+	# Note: we use 'badip' here (singular) for load command consistency
+	DXClusterSync::broadcast_load('badip');
 }
 
 1;
