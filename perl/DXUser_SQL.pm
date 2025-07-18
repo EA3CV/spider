@@ -359,10 +359,12 @@ sub put {
 
 	$self->{lastseen} = $main::systime unless $self->{lastseen};
 
-	my @values;
-	my @columns = map { "`$_`" } @FIELDS;
+	# Fetch current row from the database
+	my $sth = $dbh->prepare("SELECT * FROM `$table` WHERE `call` = ?");
+	$sth->execute($call);
+	my $current = $sth->fetchrow_hashref || {};
 
-	# Only these fields should be serialised as JSON
+	# Fields to encode as JSON
 	my %json_fields = map { $_ => 1 } qw(
 		believe
 		buddies
@@ -371,10 +373,34 @@ sub put {
 		group
 	);
 
+	my %changes;
 	foreach my $f (@FIELDS) {
-		my $val = $self->{$f};
+		my $new_val = $self->{$f};
+		my $old_val = $current->{$f};
 
+		# Normalize values for comparison
 		if ($json_fields{$f}) {
+			$new_val = $json->encode($new_val || {});
+			$old_val = $old_val || '';
+		} else {
+			$new_val = '' unless defined $new_val;
+			$old_val = '' unless defined $old_val;
+		}
+
+		# Compare values
+		next if $new_val eq $old_val;
+		$changes{$f} = $self->{$f};
+	}
+
+	return 1 unless %changes;  # Nothing to update
+
+	my @columns = keys %changes;
+	my @values;
+
+	foreach my $col (@columns) {
+		my $val = $changes{$col};
+
+		if ($json_fields{$col}) {
 			push @values, defined $val ? $json->encode($val) : undef;
 		} else {
 			if (defined $val && !Encode::is_utf8($val)) {
@@ -384,15 +410,14 @@ sub put {
 		}
 	}
 
-	my $placeholders = join(", ", ("?") x @FIELDS);
+	my $set_clause = join(", ", map { "`$_` = ?" } @columns);
+	my $sql = "UPDATE `$table` SET $set_clause WHERE `call` = ?";
+	push @values, $call;
 
-	my $sql = ($main::db_backend eq 'mysql')
-		? "INSERT INTO `$table` (" . join(", ", @columns) . ") VALUES ($placeholders)
-		   ON DUPLICATE KEY UPDATE " . join(", ", map { "$_ = VALUES($_)" } @columns)
-		: "REPLACE INTO `$table` (" . join(", ", @columns) . ") VALUES ($placeholders)";
+	my $sth2 = $dbh->prepare($sql);
+	$sth2->execute(@values);
 
-	my $sth = $dbh->prepare($sql);
-	$sth->execute(@values);
+	print "[DXUser_SQL] Updated $call: " . join(", ", @columns) . "\n" if $main::dxdebug;
 
 	return 1;
 }
